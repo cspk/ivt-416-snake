@@ -1,0 +1,8 @@
+[
+  {
+    "directory": "/home/cyblster/Git/ivt-416-snake/build",
+    "command": "cc -Isnake.p -I. -I.. -fdiagnostics-color=always -pipe -D_FILE_OFFSET_BITS=64 -Wall -Winvalid-pch -g -MD -MQ snake.p/main.c.o -MF snake.p/main.c.o.d -o snake.p/main.c.o -c ../main.c",
+    "file": "../main.c",
+    "output": "snake.p/main.c.o"
+  }
+]
