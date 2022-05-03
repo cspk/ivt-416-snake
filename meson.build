@@ -1,2 +1,3 @@
 project('snake-game', 'c')
-executable('snake', 'main.c')
+dependency('ncurses', required: true)
+executable('snake', 'main.c', link_args: '-lncurses')
