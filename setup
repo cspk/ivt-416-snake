@@ -1,0 +1,7 @@
+meson setup build/
+cd build/
+meson compile
+cd ..
+touch run
+echo "./build/snake" > run
+chmod ugo+x run
