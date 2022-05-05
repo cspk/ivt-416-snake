@@ -1,13 +1,12 @@
-#include <curses.h>
 #include <stdlib.h>
+#include <ncurses.h>
 #include <time.h>
-#include <string.h>
-#include <signal.h>
 
 #define FOOD '@'
 #define SNAKE '#'
 #define RIP 'X'
 #define WALL 'W'
+#define GRID ' '
 
 #define INIT_SNAKE_LENGTH 5
 #define MAX_SNAKE_LENGTH 500
@@ -25,11 +24,25 @@
 
 #define FRAME_SPEED 100
 
-volatile sig_atomic_t signal_status = 0;
 
-void sighandler(int s) {
-    signal_status = s;
-}
+typedef struct Coord {
+    int row, col;
+} Coord;
+
+typedef struct Stack {
+    Coord head, tail;
+} Stack;
+
+char **board;
+Stack *snake;
+
+int snake_draw_length = 0;
+int snake_length = INIT_SNAKE_LENGTH;
+
+int direction = LEFT;
+
+int game_over = 0;
+
 
 void init_ncurses() {
     initscr();
@@ -41,11 +54,6 @@ void init_ncurses() {
     leaveok(stdscr, TRUE);
     keypad(stdscr, TRUE);
     curs_set(0);
-    
-    signal(SIGINT, sighandler);
-    signal(SIGQUIT, sighandler);
-    signal(SIGWINCH, sighandler);
-    signal(SIGTSTP, sighandler);
 }
 
 void finish_ncurses() {
@@ -57,34 +65,20 @@ void finish_ncurses() {
     exit(0);
 }
 
-typedef struct Coord {
-    int row, col;
-} Coord;
-
-Coord snake[MAX_SNAKE_LENGTH];
-
-char **board;
-
-Coord get_random_coord() {
-    Coord rand_coord;
-    while (true) {
-        rand_coord.row = rand() % (LINES - 1);
-        rand_coord.col = rand() % (COLS - 1);
-        if (board[rand_coord.row][rand_coord.col] == ' ') {
-            break;
-        }
-    }
-    return rand_coord;
-}
-
 void draw_char(int row, int col, char ch) {
-    board[row][col] = ch;
     move(row, col);
     addch(ch);
+    refresh();
 }
 
 void draw_food() {
-    Coord rand_coord = get_random_coord();
+    Coord rand_coord;
+    while (true) {
+        rand_coord.row = rand() % (LINES - 2);
+        rand_coord.col = rand() % (COLS - 2);
+        if (board[rand_coord.row][rand_coord.col] == GRID) break;
+    }
+    board[rand_coord.row][rand_coord.col] = FOOD;
     draw_char(rand_coord.row, rand_coord.col, FOOD);
 }
 
@@ -96,7 +90,7 @@ void clear_board() {
                 board[i][j] = WALL;
                 draw_char(i, j, WALL);
             }
-            else board[i][j] = ' ';
+            else board[i][j] = GRID;
 }
 
 void init_board() {
@@ -113,110 +107,145 @@ void init_board() {
     clear_board();
 }
 
+void init_snake() {
+    snake = (Stack*)malloc(LINES * COLS * sizeof(Stack));
+    
+    snake[0].head.row = LINES / 2 - 1;
+    snake[0].head.col = COLS / 2 - 1;
+    
+    draw_char(snake[0].head.row, snake[0].head.col, SNAKE);
+    
+    snake_draw_length++;
+}
 
-int snake_size = 1;
-int snake_length = INIT_SNAKE_LENGTH;
+void change_tail() {
+   for(int i = snake_draw_length; i > 0; i--)
+        snake[i].head = snake[i - 1].tail = snake[i - 1].head;
+}
 
-int direction;
-int game_over = 0;
+void change_head() {
+    switch(direction) {
+        case LEFT:
+            change_tail();
+            snake[0].head.col--;
+            break;
+            
+        case RIGHT:
+            change_tail();
+            snake[0].head.col++;
+            break;
+            
+        case UP:
+            change_tail();
+            snake[0].head.row--;
+            break;
+            
+        case DOWN:
+            change_tail();
+            snake[0].head.row++;
+            break;
+    }
+}
 
 void change_direction() {
-    int keypress;
-    keypress = wgetch(stdscr);
-    if (keypress == ERR) {
-        return;
-    }
-    if (keypress == KEY_ESC) {
-        finish_ncurses();
-    }
-    if (game_over) {
-        if (keypress == KEY_R_LOWER || keypress == KEY_R_UPPER) {
+    int keypressed = wgetch(stdscr);
+    switch(keypressed) {
+        case ERR:
+            return;
+            
+        case KEY_ESC:
+            finish_ncurses();
+            break;
+        
+        case KEY_R_LOWER:
             clear_board();
             snake_length = INIT_SNAKE_LENGTH;
-            snake_size = 1;
-            snake[0] = get_random_coord();
+            snake_draw_length = 1;
+            snake[0].head.row = LINES / 2;
+            snake[0].head.col = COLS / 2;
             direction = rand() % 4;
             game_over = 0;
             clear();
             refresh();
             clear_board();
-            draw_char(snake[0].row, snake[0].col, SNAKE);
+            draw_char(snake[0].head.row, snake[0].head.col, SNAKE);
             draw_food();
-        }
-        return;
-    }
-    if (keypress == KEY_LEFT && direction != RIGHT) {
-        direction = LEFT;
-    } else if (keypress == KEY_RIGHT && direction != LEFT) {
-        direction = RIGHT;
-    } else if (keypress == KEY_UP && direction != DOWN) {
-        direction = UP;
-    }  else if (keypress == KEY_DOWN && direction != UP) {
-        direction = DOWN;
-    }
-}
-
-void change_head() {
-    if (direction == RIGHT) {
-        snake[0].col++;
-    } else if (direction == LEFT) {
-        snake[0].col--;
-    } else if (direction == UP) {
-        snake[0].row--;
-    } else if (direction == DOWN) {
-        snake[0].row++;
+            break;
+            
+        case KEY_R_UPPER:
+            clear_board();
+            snake_length = INIT_SNAKE_LENGTH;
+            snake_draw_length = 1;
+            snake[0].head.row = LINES / 2;
+            snake[0].head.col = COLS / 2;
+            direction = rand() % 4;
+            game_over = 0;
+            clear();
+            refresh();
+            clear_board();
+            draw_char(snake[0].head.row, snake[0].head.col, SNAKE);
+            draw_food();
+            break;
+        
+        case KEY_LEFT:
+            if(direction != RIGHT) direction = LEFT;
+            break;
+            
+        case KEY_RIGHT:
+            if(direction != LEFT) direction = RIGHT;
+            break;
+            
+        case KEY_UP:
+            if(direction != DOWN) direction = UP;
+            break;
+            
+        case KEY_DOWN:
+            if(direction != UP) direction = DOWN;
+            break;
     }
 }
 
 int verify_head() {
-    if (snake[0].row < 1 || snake[0].col < 1
-    || snake[0].row >= LINES - 1 || snake[0].col >= COLS - 1
-    || board[snake[0].row][snake[0].col] == '#') {
-        draw_char(snake[1].row, snake[1].col, RIP);
+    if (snake[0].head.row < 1 || snake[0].head.col < 1
+    || snake[0].head.row >= LINES - 1 || snake[0].head.col >= COLS - 1
+    || board[snake[0].head.row][snake[0].head.col] == '#') {
+        draw_char(snake[1].head.row, snake[1].head.col, RIP);
         return 1;
     }
     return 0;
 }
 
 void snake_logic() {
-    memmove(&snake[1], &snake[0], sizeof(Coord) * snake_size);
     change_head();
     if (verify_head()) {
         direction = FREEZE;
         game_over = 1;
         return;
     }
-    if (board[snake[0].row][snake[0].col] == FOOD) {
+    if (board[snake[0].head.row][snake[0].head.col] == FOOD) {
         snake_length += SNAKE_INCREASE;
         draw_food();
     }
-    draw_char(snake[0].row, snake[0].col, SNAKE);
-    if (snake_size < snake_length) {
-        snake_size++;
-    } else {
-        draw_char(snake[snake_size].row, snake[snake_size].col, ' ');
+    board[snake[0].head.row][snake[0].head.col] = SNAKE;
+    draw_char(snake[0].head.row, snake[0].head.col, SNAKE);
+    
+    if(snake_draw_length <= snake_length) snake_draw_length++;
+    else {
+        board[snake[snake_draw_length - 1].tail.row][snake[snake_draw_length - 1].tail.col] = GRID;
+        draw_char(snake[snake_draw_length - 1].tail.row, snake[snake_draw_length - 1].tail.col, GRID);
     }
 }
 
 int main() {
     srand((unsigned) time(NULL));
-    direction = rand() % 4;
-    
     init_ncurses();
     init_board();
-    snake[0] = get_random_coord();
-    draw_char(snake[0].row, snake[0].col, SNAKE);
+    init_snake();
     draw_food();
-    while (true) {
-        if (signal_status) {
-            finish_ncurses();
-        }
-        if (direction != FREEZE && !game_over) {
-            snake_logic();
-        }
+    while(true) {
         change_direction();
-        napms(FRAME_SPEED);
-        change_direction();
+        napms(100);
+        if(direction != FREEZE && !game_over) snake_logic();    
     }
     finish_ncurses();
     
